@@ -5,6 +5,7 @@ import {
   Layout,
   Typography,
   Input,
+  InputNumber,
   AutoComplete,
   Select,
   Button,
@@ -131,22 +132,25 @@ async function fetchModels(baseURL, apiKey, signal) {
   return { models: data.data || [], duration };
 }
 
-async function testLatency(baseURL, apiKey, modelName, signal) {
+async function testLatency(baseURL, apiKey, modelName, testMessage, maxTokens, signal) {
   const isAnthropic = baseURL.includes('anthropic.com');
   const url = `${baseURL}/v1/${isAnthropic ? 'messages' : 'chat/completions'}`;
+
+  const safeMax = Math.max(1, Math.min(Number(maxTokens) || 16, 2048));
+  const safeMessage = (testMessage ?? '').toString().slice(0, 2000) || 'Hi';
 
   const body = isAnthropic
     ? {
         model: modelName || 'claude-sonnet-4-20250514',
-        max_tokens: 16,
+        max_tokens: safeMax,
         stream: true,
-        messages: [{ role: 'user', content: 'Hi' }],
+        messages: [{ role: 'user', content: safeMessage }],
       }
     : {
         model: modelName || 'gpt-4o-mini',
-        max_tokens: 16,
+        max_tokens: safeMax,
         stream: true,
-        messages: [{ role: 'user', content: 'Hi' }],
+        messages: [{ role: 'user', content: safeMessage }],
       };
 
   const start = performance.now();
@@ -225,6 +229,9 @@ export default function App() {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customURL, setCustomURL] = useState('');
   const [modelName, setModelName] = useState('gpt-4o-mini');
+  const [testMessage, setTestMessage] = useState('Hi');
+  const [maxTokens, setMaxTokens] = useState(16);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   /* model test state */
   const [modelLoading, setModelLoading] = useState(false);
@@ -314,12 +321,12 @@ export default function App() {
     setLatencyLoading(true);
     setLatencyError(null);
     try {
-      const result = await testLatency(activeURL, apiKey, modelName);
+      const result = await testLatency(activeURL, apiKey, modelName, testMessage, maxTokens);
       if (result.error) {
         setLatencyError(result.error);
       }
       setLatencyResults((prev) => [
-        { ...result, timestamp: new Date().toLocaleTimeString('zh-CN'), model: modelName },
+        { ...result, timestamp: new Date().toLocaleTimeString('zh-CN'), model: modelName, message: testMessage },
         ...prev,
       ]);
     } catch (err) {
@@ -327,7 +334,7 @@ export default function App() {
     } finally {
       setLatencyLoading(false);
     }
-  }, [activeURL, apiKey, modelName]);
+  }, [activeURL, apiKey, modelName, testMessage, maxTokens]);
 
   /* ── table columns ────────────────────────────────────────── */
 
@@ -661,6 +668,74 @@ export default function App() {
                   )}
                 </Col>
               </Row>
+
+              {/* ── Advanced: Test Message & Max Tokens ──────── */}
+              <Flex
+                align="center"
+                gap={6}
+                onClick={() => setShowAdvanced((v) => !v)}
+                style={{ cursor: 'pointer', userSelect: 'none', marginTop: 16, marginBottom: showAdvanced ? 10 : 0 }}
+              >
+                <Text
+                  strong
+                  style={{ fontSize: 12, color: 'var(--seed-muted)', textTransform: 'uppercase', letterSpacing: '0.02em' }}
+                >
+                  请求体配置
+                </Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  {showAdvanced ? '收起 ▴' : '展开 ▾'}
+                </Text>
+              </Flex>
+              {showAdvanced && (
+                <Row gutter={[16, 12]}>
+                  <Col xs={24} md={16}>
+                    <Text
+                      strong
+                      style={{
+                        display: 'block',
+                        marginBottom: 6,
+                        fontSize: 11,
+                        color: 'var(--seed-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.02em',
+                      }}
+                    >
+                      测试语句
+                    </Text>
+                    <Input.TextArea
+                      value={testMessage}
+                      onChange={(e) => setTestMessage(e.target.value)}
+                      placeholder="输入要发送给模型的测试消息"
+                      autoSize={{ minRows: 1, maxRows: 4 }}
+                      maxLength={2000}
+                      showCount
+                    />
+                  </Col>
+                  <Col xs={24} md={8}>
+                    <Text
+                      strong
+                      style={{
+                        display: 'block',
+                        marginBottom: 6,
+                        fontSize: 11,
+                        color: 'var(--seed-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.02em',
+                      }}
+                    >
+                      Max Tokens
+                    </Text>
+                    <InputNumber
+                      value={maxTokens}
+                      onChange={(v) => setMaxTokens(Math.max(1, Math.min(Number(v) || 16, 2048)))}
+                      min={1}
+                      max={2048}
+                      step={1}
+                      style={{ width: '100%' }}
+                    />
+                  </Col>
+                </Row>
+              )}
             </Card>
 
             {/* ── Test sections grid ──────────────────────── */}
